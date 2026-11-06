@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   AURA LUXE Data Extraction Rules (Android 12+)
+   Controls cloud backup and device transfer policies for patient and clinical data.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="database" path="aura_luxe_local.db-wal"/>
+        <exclude domain="database" path="aura_luxe_local.db-shm"/>
+    </cloud-backup>
+    <device-transfer>
+        <include domain="database" path="."/>
+    </device-transfer>
+</data-extraction-rules>

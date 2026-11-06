@@ -1,0 +1,6 @@
+{
+  "name": "AURA LUXE",
+  "description": "Ultra-modern B2B marketplace for luxury clinics, aesthetic suites, salons, and dental smile studios with Persian RTL support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

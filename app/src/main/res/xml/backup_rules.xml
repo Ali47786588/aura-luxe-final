@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   AURA LUXE Secure Backup Rules (Android 12+)
+   Excludes encrypted SQLite database and encryption preferences from unencrypted backups
+   to prevent offline extraction from compromised Google Drive / Cloud accounts.
+-->
+<full-backup-content>
+    <include domain="database" path="."/>
+    <!-- Protect master database from plain cloud extraction -->
+    <exclude domain="database" path="aura_luxe_local.db-wal"/>
+    <exclude domain="database" path="aura_luxe_local.db-shm"/>
+</full-backup-content>
