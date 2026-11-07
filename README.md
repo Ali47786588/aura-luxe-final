@@ -1,22 +1,53 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# AURA LUXE — Ultra-Modern B2B Clinical Marketplace
 
-# Run and deploy your AI Studio app
+A luxury B2B marketplace and live suite allocation system for board-certified aesthetic clinics, dermatologists, dental smile design studios, and VIP salons in Tehran and Karaj, with full Persian RTL and English localization.
 
-This contains everything you need to run your app locally.
+## Features Ported
 
-View your app in AI Studio: https://ai.studio/apps/96733ab4-28a9-4186-94ee-2daaa671873d
+1. **Public Luxury Marketplace & Catalog**:
+   - Curated clinic suites, operatories, and styling lounges across Tehran (Saadat Abad, Elahieh, Zafaraniyeh, Niavaran, Shahrak-e Gharb) and Karaj (Gohardasht, Fardis, Mehrshahr, Azimiyeh).
+   - Category filtering (Aesthetics & Laser, Dental Studios, VIP Salons).
+   - Deep inspection modal with full technical inventory, sterilization certifications (ISO 13485 cleanroom, Ministry of Health Grade A+), and licensing numbers.
 
-## Run Locally
+2. **Real-time Operatory & Suite Telemetry**:
+   - Live status tracking (Available, In-Procedure, Sanitizing, Reserved).
+   - Autoclave pack and assistant/nurse inclusion indicators.
+   - 1-click suite reservation workflow.
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+3. **Cinematic Before / After Outcomes**:
+   - Dual-layer interactive draggable comparison slider with clinical filters and outcome metrics.
 
+4. **Clinical Stories & Instagram Highlights**:
+   - Multi-slide case highlights with auto-advancing progress timers, slide navigation, and instant doctor inquiry messenger.
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
-7. If you have already published your app in AI Studio, please [request upload key reset](https://support.google.com/googleplay/android-developer/answer/9842756#zippy=%2Crequest-an-upload-key-reset) in Google Play Console.
+5. **Executive Clinic Director Portal**:
+   - Authenticated with Demo PIN (`2026`).
+   - Real-time unit state toggles (Available / In Procedure / Sanitizing / Reserved).
+   - Booking requests review queue (Confirm or Decline).
+   - Facility occupancy rate and shift revenue projections.
+
+6. **SuperAdmin Regulatory & Escrow Governance Console**:
+   - Authenticated with Demo PIN (`7890`).
+   - 4-step escrow clearing engine (Held in Escrow -> Patient Arrival -> Doctor Digital Sign-off -> 120m Cooldown -> Sheba Release).
+   - Strict Iranian National ID (Modulo 11) and Sheba IBAN (ISO 7064) checksum validation.
+   - Digital signature pad with cryptographic SHA-256 seal.
+   - Official B2B tax invoice generator with Shaparak RRN and VAT computation.
+   - Partner facility licensing application approvals.
+   - Immutable security and audit logging ledger with anti-brute-force lockout.
+
+## Running Locally
+
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+2. Start the development server on port 3000:
+   ```bash
+   npm run dev
+   ```
+
+3. Build for production:
+   ```bash
+   npm run build
+   ```

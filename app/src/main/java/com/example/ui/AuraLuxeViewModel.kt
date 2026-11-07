@@ -3,9 +3,14 @@ package com.example.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.*
+import com.example.data.remote.supabase.SupabaseAuthResult
+import com.example.data.remote.supabase.SupabaseSession
+import com.example.data.remote.supabase.SupabaseUser
 import com.example.data.repository.AuraRepository
 import com.example.data.repository.IAuraRepository
+import com.example.data.repository.ISupabaseSyncGateway
 import com.example.security.SecurityManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -47,6 +52,12 @@ class AuraLuxeViewModel(
     val tickets: StateFlow<List<SupportTicket>> = repository.tickets
     val auditLogs: StateFlow<List<SecurityAuditLog>> = repository.auditLogs
 
+    val supabaseSession: StateFlow<SupabaseSession?> = repository.supabaseGateway.currentSession
+    val supabaseUser: StateFlow<SupabaseUser?> = repository.supabaseGateway.currentUser
+
+    private val _isSupabaseAuthLoading = MutableStateFlow(false)
+    val isSupabaseAuthLoading: StateFlow<Boolean> = _isSupabaseAuthLoading.asStateFlow()
+
     private val _language = MutableStateFlow(Language.FA)
     val language: StateFlow<Language> = _language.asStateFlow()
 
@@ -80,6 +91,8 @@ class AuraLuxeViewModel(
 
     private val _submittedBookingRequest = MutableStateFlow<BookingRequest?>(null)
     val submittedBookingRequest: StateFlow<BookingRequest?> = _submittedBookingRequest.asStateFlow()
+    private val _isBookingSubmitting = MutableStateFlow(false)
+    val isBookingSubmitting: StateFlow<Boolean> = _isBookingSubmitting.asStateFlow()
 
     private val _activeStoryHighlight = MutableStateFlow<StoryHighlight?>(null)
     val activeStoryHighlight: StateFlow<StoryHighlight?> = _activeStoryHighlight.asStateFlow()
@@ -124,7 +137,18 @@ class AuraLuxeViewModel(
     }
 
     fun openBooking(venue: Venue? = null, slot: RealtimeSlot? = null) {
-        _preselectedBookingVenue.value = venue ?: venues[0]
+        val selectedVenue = venue ?: venues.firstOrNull()
+
+        if (selectedVenue == null) {
+            showToast(
+                ToastType.WARNING,
+                if (_language.value == Language.FA) "امکان ثبت نوبت وجود ندارد" else "Booking Unavailable",
+                if (_language.value == Language.FA) "در حال حاضر مرکزی برای ثبت نوبت موجود نیست." else "No venue is currently available for booking."
+            )
+            return
+        }
+
+        _preselectedBookingVenue.value = selectedVenue
         _preselectedBookingSlot.value = slot
         _submittedBookingRequest.value = null
         _activeModal.value = ActiveModal.BOOKING_REQUEST
@@ -189,30 +213,56 @@ class AuraLuxeViewModel(
         suggestedTime: String,
         notes: String
     ) {
-        val venue = _preselectedBookingVenue.value ?: venues[0]
-        val slot = _preselectedBookingSlot.value
-        val req = repository.submitBookingRequest(
-            fullName = SecurityManager.sanitizeInput(fullName),
-            phoneNumber = SecurityManager.sanitizeInput(phoneNumber),
-            desiredService = SecurityManager.sanitizeInput(desiredService),
-            suggestedDate = suggestedDate,
-            suggestedTime = suggestedTime,
-            venueId = venue.id,
-            venueNameFa = venue.nameFa,
-            venueNameEn = venue.nameEn,
-            slotId = slot?.id,
-            slotNameFa = slot?.roomNameFa,
-            slotNameEn = slot?.roomNameEn,
-            notes = SecurityManager.sanitizeInput(notes)
-        )
-        _submittedBookingRequest.value = req
-        showToast(
-            ToastType.SUCCESS,
-            if (_language.value == Language.FA) "درخواست نوبت ثبت شد" else "Appointment Requested",
-            if (_language.value == Language.FA) "کد رهگیری: ${req.trackingCode}" else "Tracking: ${req.trackingCode}"
-        )
-    }
+        if (!_isBookingSubmitting.compareAndSet(false, true)) return
 
+        viewModelScope.launch {
+            try {
+                val venue = _preselectedBookingVenue.value ?: venues.firstOrNull()
+                    ?: throw IllegalStateException("No booking venue is available")
+                val slot = _preselectedBookingSlot.value
+
+                val req = repository.submitBookingRequest(
+                    fullName = SecurityManager.sanitizeInput(fullName),
+                    phoneNumber = SecurityManager.sanitizeInput(phoneNumber),
+                    desiredService = SecurityManager.sanitizeInput(desiredService),
+                    suggestedDate = suggestedDate,
+                    suggestedTime = suggestedTime,
+                    venueId = venue.id,
+                    venueNameFa = venue.nameFa,
+                    venueNameEn = venue.nameEn,
+                    slotId = slot?.id,
+                    slotNameFa = slot?.roomNameFa,
+                    slotNameEn = slot?.roomNameEn,
+                    notes = SecurityManager.sanitizeInput(notes)
+                )
+                _submittedBookingRequest.value = req
+
+                if (req.wasDuplicate) {
+                    showToast(
+                        ToastType.INFO,
+                        if (_language.value == Language.FA) "این زمان قبلاً درخواست شده است" else "This time slot was already requested",
+                        if (_language.value == Language.FA) "کد رهگیری درخواست قبلی: ${req.trackingCode}" else "Previous request tracking: ${req.trackingCode}"
+                    )
+                } else {
+                    showToast(
+                        ToastType.SUCCESS,
+                        if (_language.value == Language.FA) "درخواست نوبت ثبت شد" else "Appointment Requested",
+                        if (_language.value == Language.FA) "کد رهگیری: ${req.trackingCode}" else "Tracking: ${req.trackingCode}"
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                showToast(
+                    ToastType.WARNING,
+                    if (_language.value == Language.FA) "ثبت نوبت ناموفق بود" else "Booking Failed",
+                    if (_language.value == Language.FA) "ذخیره درخواست انجام نشد؛ لطفاً دوباره تلاش کن." else "The request could not be saved. Please try again."
+                )
+            } finally {
+                _isBookingSubmitting.value = false
+            }
+        }
+    }
     fun loginWithPin(pin: String): SecurityManager.AuthResult {
         val result = SecurityManager.authenticate(pin)
         if (result.success && result.role != null) {
@@ -242,25 +292,220 @@ class AuraLuxeViewModel(
         }
         return result
     }
-
     fun logout() {
         val prevRole = _userRole.value
         val currentToken = _sessionToken.value
-        SecurityManager.invalidateSession(currentToken)
-        _userRole.value = UserRole.PUBLIC
-        _sessionToken.value = null
-        showToast(
-            ToastType.INFO,
-            if (_language.value == Language.FA) "خروج از حساب" else "Logged Out",
-            if (_language.value == Language.FA) "نشست کاربری با موفقیت بسته شد." else "Session terminated."
-        )
+        val isDemoLogout = !currentToken.isNullOrBlank()
+
+        if (isDemoLogout) {
+            SecurityManager.invalidateSession(currentToken)
+            _userRole.value = UserRole.PUBLIC
+            _sessionToken.value = null
+            showToast(
+                ToastType.INFO,
+                if (_language.value == Language.FA) "خروج از حساب آزمایشی" else "Demo Logged Out",
+                if (_language.value == Language.FA) "نشست آزمایشی بسته شد." else "Demo session terminated."
+            )
+        } else {
+            _userRole.value = UserRole.PUBLIC
+            _sessionToken.value = null
+            viewModelScope.launch {
+                try {
+                    when (val result = repository.supabaseSignOut()) {
+                        is SupabaseAuthResult.SignedOut -> {
+                            showToast(
+                                ToastType.INFO,
+                                if (_language.value == Language.FA) "خروج از حساب" else "Logged Out",
+                                if (_language.value == Language.FA) "نشست کاربری بسته شد." else result.message
+                            )
+                        }
+                        is SupabaseAuthResult.Error -> {
+                            showToast(
+                                ToastType.WARNING,
+                                if (_language.value == Language.FA) "خروج نیازمند بررسی" else "Logout Needs Attention",
+                                result.message
+                            )
+                        }
+                        else -> {
+                            showToast(
+                                ToastType.WARNING,
+                                if (_language.value == Language.FA) "وضعیت خروج نامشخص" else "Logout Status Unknown",
+                                if (_language.value == Language.FA) "وضعیت خروج از سرور تأیید نشد." else "Server sign-out was not confirmed."
+                            )
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    showToast(
+                        ToastType.ERROR,
+                        if (_language.value == Language.FA) "خطا هنگام خروج" else "Logout Error",
+                        error.message ?: "Logout could not be completed."
+                    )
+                }
+            }
+        }
+
         repository.addAuditLog(
             type = "auth",
             severity = Severity.INFO,
             titleFa = "خروج کاربر از سیستم",
             titleEn = "User Logout",
-            details = "خروج از نقش ${prevRole.name} و ابطال نشست امنیتی."
+            details = "خروج از نقش ${prevRole.name} و درخواست ابطال نشست."
         )
+    }
+
+    fun signInWithSupabase(email: String, pass: String) {
+        viewModelScope.launch {
+            _isSupabaseAuthLoading.value = true
+            val isFa = _language.value == Language.FA
+
+            try {
+                val result = repository.supabaseSignIn(email.trim(), pass)
+
+                when (result) {
+                    is SupabaseAuthResult.Success -> {
+                        val user = result.user
+                        SecurityManager.invalidateSession(_sessionToken.value)
+                        _sessionToken.value = null
+                        _userRole.value = UserRole.PUBLIC
+                        closeModal()
+                        showToast(
+                            ToastType.SUCCESS,
+                            if (isFa) "ورود با سوپابیس موفقیت‌آمیز بود" else "Supabase Login Successful",
+                            if (isFa) "حساب کاربری ${user?.email ?: ""} متصل شد." else "Connected as ${user?.email ?: ""}."
+                        )
+                        repository.addAuditLog(
+                            type = "auth",
+                            severity = Severity.INFO,
+                            titleFa = "ورود از طریق سرور سوپابیس",
+                            titleEn = "Supabase Cloud Authentication",
+                            details = "ورود کاربر ${user?.email} با توکن امنیتی GoTrue."
+                        )
+                    }
+                    is SupabaseAuthResult.ConfirmationRequired -> {
+                        showToast(
+                            ToastType.INFO,
+                            if (isFa) "تأیید ایمیل لازم است" else "Email confirmation required",
+                            result.message
+                        )
+                    }
+                    is SupabaseAuthResult.Error -> {
+                        showToast(
+                            ToastType.ERROR,
+                            if (isFa) "خطای ورود با سوپابیس" else "Supabase Auth Failed",
+                            result.message
+                        )
+                    }
+                    else -> Unit
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                showToast(
+                    ToastType.ERROR,
+                    if (isFa) "خطای ارتباط با سوپابیس" else "Supabase Connection Error",
+                    error.message ?: if (isFa) "ورود انجام نشد. دوباره تلاش کنید." else "Login failed. Please try again."
+                )
+            } finally {
+                _isSupabaseAuthLoading.value = false
+            }
+        }
+    }
+
+    fun signUpWithSupabase(email: String, pass: String, fullName: String) {
+        viewModelScope.launch {
+            _isSupabaseAuthLoading.value = true
+            val isFa = _language.value == Language.FA
+            val metadata = mapOf("full_name" to fullName)
+
+            try {
+                val result = repository.supabaseSignUp(email.trim(), pass, metadata)
+
+                when (result) {
+                    is SupabaseAuthResult.Success -> {
+                        val user = result.user
+                        SecurityManager.invalidateSession(_sessionToken.value)
+                        _sessionToken.value = null
+                        _userRole.value = UserRole.PUBLIC
+                        closeModal()
+                        showToast(
+                            ToastType.SUCCESS,
+                            if (isFa) "ثبت‌نام در سوپابیس انجام شد" else "Supabase Registration Complete",
+                            if (isFa) "حساب کاربری جدید برای ${user?.email ?: ""} ایجاد گردید." else "Account created for ${user?.email ?: ""}."
+                        )
+                        repository.addAuditLog(
+                            type = "auth",
+                            severity = Severity.INFO,
+                            titleFa = "ثبت‌نام کاربر جدید در سوپابیس",
+                            titleEn = "New User Registration",
+                            details = "ایجاد حساب برای ${user?.email} در پروژه Supabase."
+                        )
+                    }
+                    is SupabaseAuthResult.ConfirmationRequired -> {
+                        showToast(
+                            ToastType.INFO,
+                            if (isFa) "تأیید ایمیل لازم است" else "Email confirmation required",
+                            result.message
+                        )
+                    }
+                    is SupabaseAuthResult.Error -> {
+                        showToast(
+                            ToastType.ERROR,
+                            if (isFa) "خطای ثبت‌نام در سوپابیس" else "Supabase Sign-Up Error",
+                            result.message
+                        )
+                    }
+                    else -> Unit
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                showToast(
+                    ToastType.ERROR,
+                    if (isFa) "خطای ارتباط هنگام ثبت‌نام" else "Supabase Sign-Up Connection Error",
+                    error.message ?: if (isFa) "ثبت‌نام انجام نشد. دوباره تلاش کنید." else "Sign-up failed. Please try again."
+                )
+            } finally {
+                _isSupabaseAuthLoading.value = false
+            }
+        }
+    }
+
+
+    fun triggerCloudSync() {
+        viewModelScope.launch {
+            val isFa = _language.value == Language.FA
+            showToast(
+                ToastType.INFO,
+                if (isFa) "همگام‌سازی ابری" else "Cloud Sync Initiated",
+                if (isFa) "در حال ارسال داده‌های محلی به سرور سوپابیس..." else "Syncing local Room records to Supabase..."
+            )
+            val syncResult = repository.triggerSupabaseSync()
+            when (syncResult) {
+                is ISupabaseSyncGateway.SyncResult.Success -> {
+                    showToast(
+                        ToastType.SUCCESS,
+                        if (isFa) "همگام‌سازی تکمیل شد" else "Sync Complete",
+                        if (isFa) "${syncResult.data.size} نوبت با سرور ابری تطبیق یافت." else "${syncResult.data.size} records synced to Supabase."
+                    )
+                }
+                is ISupabaseSyncGateway.SyncResult.OfflineLocalOnly -> {
+                    showToast(
+                        ToastType.INFO,
+                        if (isFa) "حالت آفلاین امن" else "Offline-First Safe",
+                        syncResult.message
+                    )
+                }
+                is ISupabaseSyncGateway.SyncResult.Error -> {
+                    showToast(
+                        ToastType.WARNING,
+                        if (isFa) "خطای همگام‌سازی ابری" else "Cloud Sync Warning",
+                        syncResult.message
+                    )
+                }
+            }
+        }
     }
 
     private fun isAuthorizedFor(requiredRole: UserRole): Boolean {

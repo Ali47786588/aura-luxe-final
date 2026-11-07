@@ -164,7 +164,8 @@ data class BookingRequest(
     val notes: String = "",
     val status: BookingRequestStatus = BookingRequestStatus.PENDING_CONFIRMATION,
     val createdAt: String,
-    val updatedAt: String? = null
+    val updatedAt: String? = null,
+    val wasDuplicate: Boolean = false
 )
 
 data class EscrowTransaction(

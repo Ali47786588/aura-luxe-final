@@ -15,6 +15,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+          com.example.data.repository.AuraRepository.defaultContext = applicationContext
         com.example.data.repository.AuraRepository.defaultDatabase =
             com.example.data.local.AuraDatabase.getInstance(applicationContext)
         setContent {

@@ -62,8 +62,10 @@ object KeystoreEncryptionManager {
             }
             val entry = keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
             entry?.secretKey ?: throw IllegalStateException("Could not extract secret key from Keystore")
-        } catch (_: Exception) {
-            // JVM / Robolectric environment fallback: use secure local AES-256 key
+        } catch (error: Exception) {
+            if (!android.os.Build.FINGERPRINT.contains("robolectric", ignoreCase = true)) {
+                throw IllegalStateException("Android Keystore is unavailable; refusing insecure fallback.", error)
+            }
             if (testFallbackKey == null) {
                 val rawKey = ByteArray(32)
                 secureRandom.nextBytes(rawKey)

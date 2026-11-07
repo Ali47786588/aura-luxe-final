@@ -47,11 +47,13 @@ fun AuraLuxeMainScreen(
     val tickets by viewModel.tickets.collectAsStateWithLifecycle()
     val auditLogs by viewModel.auditLogs.collectAsStateWithLifecycle()
     val toasts by viewModel.toasts.collectAsStateWithLifecycle()
+    val isSupabaseAuthLoading by viewModel.isSupabaseAuthLoading.collectAsStateWithLifecycle()
 
     val selectedVenueForDetails by viewModel.selectedVenueForDetails.collectAsStateWithLifecycle()
     val preselectedBookingVenue by viewModel.preselectedBookingVenue.collectAsStateWithLifecycle()
     val preselectedBookingSlot by viewModel.preselectedBookingSlot.collectAsStateWithLifecycle()
     val submittedBookingRequest by viewModel.submittedBookingRequest.collectAsStateWithLifecycle()
+    val isBookingSubmitting by viewModel.isBookingSubmitting.collectAsStateWithLifecycle()
     val activeStoryHighlight by viewModel.activeStoryHighlight.collectAsStateWithLifecycle()
     val activeStorySlideIndex by viewModel.activeStorySlideIndex.collectAsStateWithLifecycle()
     val selectedInvoiceTx by viewModel.selectedInvoiceTx.collectAsStateWithLifecycle()
@@ -225,6 +227,7 @@ fun AuraLuxeMainScreen(
                         preselectedVenue = preselectedBookingVenue,
                         preselectedSlot = preselectedBookingSlot,
                         submittedRequest = submittedBookingRequest,
+                        isSubmitting = isBookingSubmitting,
                         onDismiss = { viewModel.closeModal() },
                         onSubmitRequest = { name, phone, srv, d, t, n ->
                             viewModel.submitBookingRequest(name, phone, srv, d, t, n)
@@ -257,7 +260,10 @@ fun AuraLuxeMainScreen(
                     AdminLoginModal(
                         language = language,
                         onDismiss = { viewModel.closeModal() },
-                        onLogin = { pin -> viewModel.loginWithPin(pin) }
+                        onLogin = { pin -> viewModel.loginWithPin(pin) },
+                        onSupabaseSignIn = { email, pass -> viewModel.signInWithSupabase(email, pass) },
+                        onSupabaseSignUp = { email, pass, name -> viewModel.signUpWithSupabase(email, pass, name) },
+                        isSupabaseLoading = isSupabaseAuthLoading
                     )
                 }
                 ActiveModal.ONBOARDING -> {

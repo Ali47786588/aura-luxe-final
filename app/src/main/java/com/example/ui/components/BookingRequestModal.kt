@@ -37,6 +37,7 @@ fun BookingRequestModal(
     preselectedVenue: Venue?,
     preselectedSlot: RealtimeSlot?,
     submittedRequest: BookingRequest?,
+    isSubmitting: Boolean,
     onDismiss: () -> Unit,
     onSubmitRequest: (
         fullName: String,
@@ -338,6 +339,7 @@ fun BookingRequestModal(
                                 onSubmitRequest(fullName, phoneNumber, desiredService, suggestedDate, suggestedTime, notes)
                             }
                         },
+                          enabled = !isSubmitting,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = GoldChampagne,
                             contentColor = ObsidianDark
@@ -349,7 +351,7 @@ fun BookingRequestModal(
                             .testTag("submit_booking_request_button")
                     ) {
                         Text(
-                            text = if (isFa) "ارسال درخواست نوبت (در انتظار تایید)" else "Submit Booking Request",
+                            text = if (isSubmitting) (if (isFa) "در حال ثبت..." else "Submitting...") else (if (isFa) "ارسال درخواست نوبت (در انتظار تایید)" else "Submit Booking Request"),
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )
@@ -445,6 +447,23 @@ fun BookingRequestModal(
 
                         Spacer(Modifier.height(14.dp))
 
+                        if (submittedRequest.wasDuplicate) {
+                            Surface(
+                                color = AmberMuted,
+                                shape = RoundedCornerShape(12.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AmberAccent.copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = if (isFa) "این زمان قبلاً درخواست شده است؛ رسید زیر مربوط به درخواست قبلی است و درخواست جدیدی ثبت نشده است." else "This time slot was already requested. The receipt below belongs to the previous request; no new request was created.",
+                                    color = AmberAccent,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(12.dp)
+                                )
+                            }
+                            Spacer(Modifier.height(14.dp))
+                        }
                         // Request Dossier Receipt
                         Surface(
                             color = ObsidianCard,

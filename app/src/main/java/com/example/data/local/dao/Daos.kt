@@ -21,7 +21,7 @@ interface AppointmentDao {
     @Query("""
         SELECT * FROM appointments 
         WHERE venueId = :venueId 
-          AND slotId = :slotId 
+          AND slotId IS :slotId
           AND suggestedDate = :date 
           AND suggestedTime = :time 
           AND status != 'REJECTED'
@@ -29,7 +29,7 @@ interface AppointmentDao {
     """)
     suspend fun findConflictingAppointment(
         venueId: String,
-        slotId: String,
+        slotId: String?,
         date: String,
         time: String
     ): AppointmentEntity?
@@ -42,6 +42,9 @@ interface AppointmentDao {
 
     @Query("UPDATE appointments SET status = :status, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateStatus(id: String, status: BookingRequestStatus, updatedAt: String)
+
+    @Query("UPDATE appointments SET isServerSynced = :isSynced WHERE id = :id")
+    suspend fun updateSyncStatus(id: String, isSynced: Boolean)
 
     @Query("DELETE FROM appointments WHERE id = :id")
     suspend fun deleteById(id: String)
@@ -182,6 +185,12 @@ interface UserSessionDao {
 
     @Query("DELETE FROM user_sessions WHERE lastActivityMs < :expiryThresholdMs")
     suspend fun purgeExpiredSessions(expiryThresholdMs: Long)
+
+    @Query("SELECT * FROM user_sessions WHERE isDemoSession = 0 ORDER BY lastActivityMs DESC LIMIT 1")
+    suspend fun getLatestSupabaseSession(): UserSessionEntity?
+
+    @Query("SELECT * FROM user_sessions ORDER BY lastActivityMs DESC LIMIT 1")
+    suspend fun getLatestSession(): UserSessionEntity?
 }
 
 @Dao
@@ -200,6 +209,9 @@ interface UserDao {
 
     @Query("SELECT * FROM users WHERE phoneNumber = :phone LIMIT 1")
     suspend fun getUserByPhone(phone: String): UserEntity?
+
+    @Query("SELECT * FROM users WHERE id = :id LIMIT 1")
+    suspend fun getUserById(id: String): UserEntity?
 }
 
 @Dao

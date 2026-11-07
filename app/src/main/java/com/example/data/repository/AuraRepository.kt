@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import com.example.R
+import androidx.room.withTransaction
 import com.example.data.local.AuraDatabase
 import com.example.data.local.entity.*
 import com.example.data.local.security.KeystoreEncryptionManager
@@ -17,11 +18,14 @@ import java.util.Date
 import java.util.Locale
 
 class AuraRepository(
-    private val database: AuraDatabase? = defaultDatabase
+    private val database: AuraDatabase? = defaultDatabase,
+    override val supabaseGateway: ISupabaseSyncGateway = defaultGateway ?: RealSupabaseSyncGateway(database, appContext = defaultContext)
 ) : IAuraRepository {
 
     companion object {
         var defaultDatabase: AuraDatabase? = null
+        var defaultContext: android.content.Context? = null
+        var defaultGateway: ISupabaseSyncGateway? = null
     }
 
     private val repositoryScope = CoroutineScope(Dispatchers.IO)
@@ -596,8 +600,7 @@ class AuraRepository(
             )
         }
     }
-
-    override fun submitBookingRequest(
+    override suspend fun submitBookingRequest(
         fullName: String,
         phoneNumber: String,
         desiredService: String,
@@ -615,28 +618,9 @@ class AuraRepository(
         val cleanPhone = SecurityManager.sanitizeInput(phoneNumber)
         val cleanNotes = SecurityManager.sanitizeInput(notes)
 
-        // Duplicate prevention check: check for identical active appointment
-        val existingDuplicate = _bookingRequests.value.find { b ->
-            b.venueId == venueId &&
-            b.slotId == slotId &&
-            b.suggestedDate == suggestedDate &&
-            b.suggestedTime == suggestedTime &&
-            b.status != BookingRequestStatus.REJECTED
-        }
-
-        if (existingDuplicate != null) {
-            addAuditLog(
-                type = "booking_collision",
-                severity = Severity.WARNING,
-                titleFa = "جلوگیری از ثبت نوبت تکراری",
-                titleEn = "Duplicate Appointment Prevented",
-                details = "سوئیت در تاریخ $suggestedDate و ساعت $suggestedTime قبلاً رزرو گردیده است."
-            )
-            return existingDuplicate
-        }
-
         val trackingCode = "REQ-2026-${(1000..9999).random()}"
-        val createdAtStr = "امروز " + SimpleDateFormat("HH:mm", Locale.forLanguageTag("fa")).format(Date())
+        val createdAtStr = "امروز " +
+            SimpleDateFormat("HH:mm", Locale.forLanguageTag("fa")).format(Date())
         val reqId = "req-${System.currentTimeMillis()}"
 
         val req = BookingRequest(
@@ -658,45 +642,108 @@ class AuraRepository(
             createdAt = createdAtStr
         )
 
-        _bookingRequests.value = listOf(req) + _bookingRequests.value
+        val appointment = AppointmentEntity(
+            id = reqId,
+            trackingCode = trackingCode,
+            fullName = cleanName,
+            phoneNumber = cleanPhone,
+            desiredService = desiredService,
+            suggestedDate = suggestedDate,
+            suggestedTime = suggestedTime,
+            venueId = venueId,
+            venueNameFa = venueNameFa,
+            venueNameEn = venueNameEn,
+            slotId = slotId,
+            slotNameFa = slotNameFa,
+            slotNameEn = slotNameEn,
+            notes = cleanNotes,
+            status = BookingRequestStatus.PENDING_CONFIRMATION,
+            isOfflineLocal = true,
+            isServerSynced = false,
+            createdAt = createdAtStr
+        )
 
-        // Persist to Room local database
-        database?.let { db ->
-            repositoryScope.launch {
-                db.appointmentDao().insert(
-                    AppointmentEntity(
-                        id = reqId,
-                        trackingCode = trackingCode,
-                        fullName = cleanName,
-                        phoneNumber = cleanPhone,
-                        desiredService = desiredService,
-                        suggestedDate = suggestedDate,
-                        suggestedTime = suggestedTime,
-                        venueId = venueId,
-                        venueNameFa = venueNameFa,
-                        venueNameEn = venueNameEn,
-                        slotId = slotId,
-                        slotNameFa = slotNameFa,
-                        slotNameEn = slotNameEn,
-                        notes = cleanNotes,
-                        status = BookingRequestStatus.PENDING_CONFIRMATION,
-                        isOfflineLocal = true,
-                        isServerSynced = false,
-                        createdAt = createdAtStr
-                    )
+        val db = database
+        val result = if (db != null) {
+            db.withTransaction {
+                val duplicate = db.appointmentDao().findConflictingAppointment(
+                    venueId = venueId,
+                    slotId = slotId,
+                    date = suggestedDate,
+                    time = suggestedTime
                 )
+
+                if (duplicate != null) {
+                    val oldRequest = BookingRequest(
+                        id = duplicate.id,
+                        trackingCode = duplicate.trackingCode,
+                        fullName = duplicate.fullName,
+                        phoneNumber = duplicate.phoneNumber,
+                        desiredService = duplicate.desiredService,
+                        suggestedDate = duplicate.suggestedDate,
+                        suggestedTime = duplicate.suggestedTime,
+                        venueId = duplicate.venueId,
+                        venueNameFa = duplicate.venueNameFa,
+                        venueNameEn = duplicate.venueNameEn,
+                        slotId = duplicate.slotId,
+                        slotNameFa = duplicate.slotNameFa,
+                        slotNameEn = duplicate.slotNameEn,
+                        notes = duplicate.notes,
+                        status = duplicate.status,
+                        createdAt = duplicate.createdAt,
+                        updatedAt = duplicate.updatedAt,
+                        wasDuplicate = true
+                    )
+                    oldRequest to true
+                } else {
+                    db.appointmentDao().insert(appointment)
+                    req to false
+                }
             }
+        } else {
+            val duplicate = _bookingRequests.value.find { booking ->
+                booking.venueId == venueId &&
+                    booking.slotId == slotId &&
+                    booking.suggestedDate == suggestedDate &&
+                    booking.suggestedTime == suggestedTime &&
+                    booking.status != BookingRequestStatus.REJECTED
+            }
+            if (duplicate != null) duplicate.copy(wasDuplicate = true) to true else req to false
+        }
+
+        val finalRequest = result.first
+        val duplicateFound = result.second
+
+        if (_bookingRequests.value.none { it.id == finalRequest.id }) {
+            _bookingRequests.value = listOf(finalRequest) + _bookingRequests.value
+        }
+
+        if (duplicateFound) {
+            addAuditLog(
+                type = "booking_collision",
+                severity = Severity.WARNING,
+                titleFa = "جلوگیری از ثبت نوبت تکراری",
+                titleEn = "Duplicate Appointment Prevented",
+                details = "سوئیت در تاریخ $suggestedDate و ساعت $suggestedTime قبلاً رزرو گردیده است."
+            )
+            return finalRequest
         }
 
         addAuditLog(
             type = "slot",
             severity = Severity.INFO,
-            titleFa = "ثبت نوبت محلی (آفلاین): ${req.fullName} ($trackingCode)",
-            titleEn = "Local Offline Booking Stored: ${req.fullName} ($trackingCode)",
-            details = "ذخیره در پایگاه‌داده محلی Room با وضعیت «در انتظار تایید»."
+            titleFa = "ثبت نوبت محلی: ${finalRequest.fullName} (${finalRequest.trackingCode})",
+            titleEn = "Local Booking Stored: ${finalRequest.fullName} (${finalRequest.trackingCode})",
+            details = if (db != null) {
+                "درخواست با موفقیت در پایگاه‌داده محلی Room ذخیره شد."
+            } else {
+                "درخواست فقط در حافظه موقت ثبت شد؛ پایگاه‌داده محلی در دسترس نبود."
+            }
         )
-        return req
+
+        return finalRequest
     }
+
 
     override fun updateBookingRequestStatus(requestId: String, newStatus: BookingRequestStatus) {
         val current = _bookingRequests.value.toMutableList()
@@ -983,5 +1030,50 @@ class AuraRepository(
                 )
             }
         }
+    }
+
+    override suspend fun supabaseSignUp(
+        email: String,
+        pass: String,
+        metadata: Map<String, String>?
+    ): com.example.data.remote.supabase.SupabaseAuthResult {
+        return supabaseGateway.signUp(email, pass, metadata)
+    }
+
+    override suspend fun supabaseSignIn(
+        email: String,
+        pass: String
+    ): com.example.data.remote.supabase.SupabaseAuthResult {
+        return supabaseGateway.signIn(email, pass)
+    }
+
+    override suspend fun supabaseSignOut(): com.example.data.remote.supabase.SupabaseAuthResult {
+        return supabaseGateway.signOut()
+    }
+
+    override suspend fun triggerSupabaseSync(): ISupabaseSyncGateway.SyncResult<List<String>> {
+        val pendingAppts = _bookingRequests.value.map { b ->
+            AppointmentEntity(
+                id = b.id,
+                trackingCode = b.trackingCode,
+                fullName = b.fullName,
+                phoneNumber = b.phoneNumber,
+                desiredService = b.desiredService,
+                suggestedDate = b.suggestedDate,
+                suggestedTime = b.suggestedTime,
+                venueId = b.venueId,
+                venueNameFa = b.venueNameFa,
+                venueNameEn = b.venueNameEn,
+                slotId = b.slotId,
+                slotNameFa = b.slotNameFa,
+                slotNameEn = b.slotNameEn,
+                notes = b.notes,
+                status = b.status,
+                isOfflineLocal = true,
+                isServerSynced = false,
+                createdAt = b.createdAt
+            )
+        }
+        return supabaseGateway.syncPendingAppointments(pendingAppts)
     }
 }

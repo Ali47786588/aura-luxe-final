@@ -294,7 +294,12 @@ data class UserSessionEntity(
     val role: UserRole,
     val createdAtMs: Long,
     val lastActivityMs: Long,
-    val isDemoSession: Boolean = true
+    val isDemoSession: Boolean = true,
+    @androidx.room.ColumnInfo(defaultValue = "''")
+    val encryptedRefreshToken: String = "",
+    @androidx.room.ColumnInfo(defaultValue = "0")
+    val expiresAtMs: Long = 0L,
+    val email: String? = null
 )
 
 /**

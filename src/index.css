@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/fonts/vazirmatn.ttf') format('truetype');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  src: url('/fonts/plus_jakarta_sans.ttf') format('truetype');
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+:root {
+  --color-obsidian-dark: #090A0D;
+  --color-obsidian-surface: #11131A;
+  --color-obsidian-card: #161822;
+  --color-obsidian-border: #232736;
+  --color-gold-champagne: #E5C378;
+  --color-gold-light: #FBF4E2;
+  --color-gold-dark: #C5A059;
+}
+
+body {
+  font-family: 'Vazirmatn', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  background-color: #090A0D;
+  color: #F9FAFB;
+  overflow-x: hidden;
+}
+
+[dir="ltr"] body {
+  font-family: 'Plus Jakarta Sans', 'Vazirmatn', system-ui, -apple-system, sans-serif;
+}
+
+/* Custom Scrollbar for Luxury Aesthetic */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090A0D;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #232736;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #E5C378;
+}

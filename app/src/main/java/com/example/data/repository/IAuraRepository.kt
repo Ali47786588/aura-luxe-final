@@ -23,7 +23,7 @@ interface IAuraRepository {
 
     fun toggleSlotStatus(slotId: String, newStatus: SlotStatus)
 
-    fun submitBookingRequest(
+    suspend fun submitBookingRequest(
         fullName: String,
         phoneNumber: String,
         desiredService: String,
@@ -55,4 +55,11 @@ interface IAuraRepository {
     fun replyToTicket(ticketId: String, content: String)
 
     fun addAuditLog(type: String, severity: Severity, titleFa: String, titleEn: String, details: String)
+
+    // Supabase Cloud Gateway Integration
+    val supabaseGateway: ISupabaseSyncGateway
+    suspend fun supabaseSignUp(email: String, pass: String, metadata: Map<String, String>? = null): com.example.data.remote.supabase.SupabaseAuthResult
+    suspend fun supabaseSignIn(email: String, pass: String): com.example.data.remote.supabase.SupabaseAuthResult
+    suspend fun supabaseSignOut(): com.example.data.remote.supabase.SupabaseAuthResult
+    suspend fun triggerSupabaseSync(): ISupabaseSyncGateway.SyncResult<List<String>>
 }

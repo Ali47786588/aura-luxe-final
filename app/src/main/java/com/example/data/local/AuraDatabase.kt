@@ -31,7 +31,7 @@ import com.example.data.local.entity.*
         ClinicUnitEntity::class,
         OnboardingApplicationEntity::class
     ],
-    version = 2,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -66,6 +66,26 @@ abstract class AuraDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE appointments ADD COLUMN isServerSynced INTEGER NOT NULL DEFAULT 0")
             }
         }
+        /**
+         * Schema Migration 2 -> 3:
+         * Stores encrypted Supabase refresh token and account email.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE user_sessions ADD COLUMN encryptedRefreshToken TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE user_sessions ADD COLUMN email TEXT")
+            }
+        }
+
+
+        /**
+         * Schema Migration 3 -> 4: Adds Supabase access-token expiration time.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE user_sessions ADD COLUMN expiresAtMs INTEGER NOT NULL DEFAULT 0")
+            }
+        }
 
         @Volatile
         private var INSTANCE: AuraDatabase? = null
@@ -82,7 +102,7 @@ abstract class AuraDatabase : RoomDatabase() {
                 AuraDatabase::class.java,
                 DATABASE_NAME
             )
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .fallbackToDestructiveMigrationOnDowngrade()
                 .build()
         }
